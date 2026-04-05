@@ -1,21 +1,27 @@
 import winston from "winston";
 
-const { combine, timestamp, printf, colorize, errors } = winston.format;
+const isProd = process.env.NODE_ENV === "production";
 
-const logFormat = printf(({ level, message, timestamp: ts, stack }) => {
-  return `${ts} [${level}]: ${stack || message}`;
-});
+const devFormat = winston.format.combine(
+  winston.format.errors({ stack: true }),
+  winston.format.timestamp(),
+  winston.format.colorize(),
+  winston.format.printf((info) => {
+    const { timestamp, level, message, stack, ...rest } = info;
+    const extra =
+      Object.keys(rest).length > 0 ? ` ${JSON.stringify(rest)}` : "";
+    return `${timestamp} [${level}]: ${stack || message || ""}${extra}`;
+  })
+);
+
+const prodFormat = winston.format.combine(
+  winston.format.errors({ stack: true }),
+  winston.format.timestamp(),
+  winston.format.json()
+);
 
 export const logger = winston.createLogger({
   level: process.env.LOG_LEVEL || "info",
-  format: combine(
-    errors({ stack: true }),
-    timestamp(),
-    logFormat
-  ),
-  transports: [
-    new winston.transports.Console({
-      format: combine(colorize(), timestamp(), logFormat),
-    }),
-  ],
+  format: isProd ? prodFormat : devFormat,
+  transports: [new winston.transports.Console()],
 });
