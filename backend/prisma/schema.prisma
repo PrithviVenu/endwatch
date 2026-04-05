@@ -7,4 +7,48 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// Extend this schema as you build features.
+enum Role {
+  USER
+  ADMIN
+}
+
+enum CheckStatus {
+  UP
+  DOWN
+}
+
+model User {
+  id           String   @id @default(uuid()) @db.Uuid
+  email        String   @unique
+  passwordHash String
+  role         Role     @default(USER)
+  createdAt    DateTime @default(now())
+  urls         Url[]
+}
+
+model Url {
+  id           String        @id @default(uuid()) @db.Uuid
+  address      String
+  label        String?
+  userId       String        @db.Uuid
+  intervalMin  Int           @default(5)
+  active       Boolean       @default(true)
+  createdAt    DateTime      @default(now())
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  checkResults CheckResult[]
+
+  @@unique([userId, address])
+}
+
+model CheckResult {
+  id           String      @id @default(uuid()) @db.Uuid
+  urlId        String      @db.Uuid
+  status       CheckStatus
+  responseTime Int?
+  statusCode   Int?
+  error        String?
+  checkedAt    DateTime    @default(now())
+  url          Url         @relation(fields: [urlId], references: [id], onDelete: Cascade)
+
+  @@index([urlId, checkedAt])
+}
