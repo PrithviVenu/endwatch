@@ -1,0 +1,31 @@
+{
+  "name": "endwatch-backend",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node --watch src/index.js",
+    "start": "node src/index.js",
+    "db:generate": "prisma generate",
+    "db:push": "prisma db push",
+    "db:migrate": "prisma migrate dev"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.0.0",
+    "axios": "^1.7.9",
+    "bcryptjs": "^2.4.3",
+    "bull": "^4.16.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "express-async-errors": "^3.1.1",
+    "ioredis": "^5.4.2",
+    "jsonwebtoken": "^9.0.2",
+    "node-cron": "^3.0.3",
+    "uuid": "^11.0.5",
+    "winston": "^3.17.0"
+  },
+  "devDependencies": {
+    "prisma": "^6.0.0"
+  }
+}
