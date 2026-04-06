@@ -28,6 +28,8 @@ function formatUptime(pct) {
   return `${Number(pct).toFixed(1)}%`
 }
 
+const ADD_INTERVAL_OPTIONS = [1, 5, 15, 30, 60]
+
 export default function Dashboard() {
   const navigate = useNavigate()
   const [stats, setStats] = useState(null)
@@ -36,6 +38,7 @@ export default function Dashboard() {
   const [error, setError] = useState('')
   const [addOpen, setAddOpen] = useState(false)
   const [addText, setAddText] = useState('')
+  const [addIntervalMin, setAddIntervalMin] = useState(5)
   const [addSubmitting, setAddSubmitting] = useState(false)
   const [checking, setChecking] = useState(false)
   const [deletingId, setDeletingId] = useState(null)
@@ -78,8 +81,13 @@ export default function Dashboard() {
     if (lines.length === 0) return
     setAddSubmitting(true)
     try {
-      await urlsApi.addUrls(lines)
+      const urls = lines.map((address) => ({
+        address,
+        intervalMin: addIntervalMin,
+      }))
+      await urlsApi.addUrls(urls)
       setAddText('')
+      setAddIntervalMin(5)
       setAddOpen(false)
       await fetchAll()
     } catch (err) {
@@ -125,7 +133,10 @@ export default function Dashboard() {
         <div className="flex flex-wrap items-center gap-3">
           <button
             type="button"
-            onClick={() => setAddOpen(true)}
+            onClick={() => {
+              setAddIntervalMin(5)
+              setAddOpen(true)
+            }}
             className="flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-white hover:opacity-90"
           >
             <Plus className="h-4 w-4" />
@@ -317,6 +328,20 @@ export default function Dashboard() {
                 placeholder="https://example.com&#10;https://another.org"
                 className="h-32 w-full rounded-lg border border-border-custom bg-hover p-3 text-white placeholder-gray-500 focus:border-accent focus:outline-none"
               />
+              <label className="mt-4 block text-sm text-gray-400">
+                Check interval (applies to all URLs)
+                <select
+                  value={addIntervalMin}
+                  onChange={(e) => setAddIntervalMin(Number(e.target.value))}
+                  className="mt-2 w-full cursor-pointer rounded-lg border border-border-custom bg-hover px-4 py-3 text-white focus:border-accent focus:outline-none"
+                >
+                  {ADD_INTERVAL_OPTIONS.map((m) => (
+                    <option key={m} value={m}>
+                      {m} min
+                    </option>
+                  ))}
+                </select>
+              </label>
               <div className="mt-4 flex justify-end gap-2">
                 <button
                   type="button"
