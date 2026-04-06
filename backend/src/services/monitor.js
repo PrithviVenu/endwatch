@@ -1,5 +1,6 @@
 import axios from "axios";
 import { prisma } from "../lib/prisma.js";
+import { sendDownAlert, sendRecoveryAlert } from "./email.js";
 import { withCorrelationId } from "../utils/logger.js";
 
 const NETWORK_RETRY_CODES = new Set(["ECONNABORTED", "ENOTFOUND", "ECONNREFUSED"]);
@@ -17,6 +18,22 @@ export async function checkUrl(url, correlationId) {
   let status = "DOWN";
   let errorKind = null;
   const log = withCorrelationId(correlationId);
+
+  let urlWithData = null;
+  try {
+    urlWithData = await prisma.url.findUnique({
+      where: { id: url.id },
+      include: {
+        user: { select: { email: true } },
+        checkResults: { orderBy: { checkedAt: "desc" }, take: 1 },
+      },
+    });
+  } catch {
+    urlWithData = null;
+  }
+
+  const previousStatus = urlWithData?.checkResults?.[0]?.status;
+  const userEmail = urlWithData?.user?.email;
 
   const maxRetries = 3; // after initial attempt (total attempts = 4)
   const baseDelayMs = 1000;
@@ -117,6 +134,18 @@ export async function checkUrl(url, correlationId) {
     statusCode,
     error,
   });
+
+  const addressForEmail = urlWithData?.address ?? url.address;
+  if (userEmail) {
+    if (
+      status === "DOWN" &&
+      (previousStatus === "UP" || previousStatus === undefined)
+    ) {
+      sendDownAlert(userEmail, addressForEmail, error);
+    } else if (status === "UP" && previousStatus === "DOWN") {
+      sendRecoveryAlert(userEmail, addressForEmail);
+    }
+  }
 
   return saved;
 }

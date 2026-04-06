@@ -8,19 +8,25 @@ const router = Router();
 
 router.use(authenticate);
 
+function normalizeUrlAddress(raw) {
+  if (raw == null) return null;
+  const trimmed = String(raw).trim();
+  if (!trimmed) return null;
+  if (!/^https?:\/\//i.test(trimmed)) {
+    return `https://${trimmed}`;
+  }
+  return trimmed;
+}
+
 function parseUrlItem(item, index) {
   if (typeof item === "string") {
-    const address = item.trim();
-    if (!address) {
-      throw new Error(`urls[${index}]: address cannot be empty`);
-    }
+    const address = normalizeUrlAddress(item);
+    if (address === null) return null;
     return { address, label: undefined, intervalMin: undefined };
   }
   if (item && typeof item === "object" && typeof item.address === "string") {
-    const address = item.address.trim();
-    if (!address) {
-      throw new Error(`urls[${index}]: address cannot be empty`);
-    }
+    const address = normalizeUrlAddress(item.address);
+    if (address === null) return null;
     const label =
       item.label === undefined || item.label === null
         ? undefined
@@ -71,7 +77,9 @@ router.post("/", async (req, res) => {
 
   try {
     for (let i = 0; i < items.length; i++) {
-      const { address, label, intervalMin } = parseUrlItem(items[i], i);
+      const parsed = parseUrlItem(items[i], i);
+      if (parsed === null) continue;
+      const { address, label, intervalMin } = parsed;
 
       const row = await prisma.url.upsert({
         where: {
@@ -106,6 +114,12 @@ router.post("/", async (req, res) => {
       return res.status(400).json({ error: e.message });
     }
     throw e;
+  }
+
+  if (results.length === 0) {
+    return res.status(400).json({
+      error: "No valid URLs to add after normalization",
+    });
   }
 
   res.status(201).json({ urls: results });
