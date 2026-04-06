@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { Fragment, useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Activity,
@@ -11,6 +11,7 @@ import {
   Trash2,
 } from 'lucide-react'
 import * as urlsApi from '../api/urls.js'
+import UrlHistoryChart from '../components/UrlHistoryChart.jsx'
 
 function formatRelativeTime(iso) {
   if (!iso) return '—'
@@ -30,6 +31,13 @@ function formatUptime(pct) {
 
 const ADD_INTERVAL_OPTIONS = [1, 5, 15, 30, 60]
 
+const HISTORY_PRESETS = [
+  { label: '1h', hours: 1 },
+  { label: '6h', hours: 6 },
+  { label: '24h', hours: 24 },
+  { label: '7d', hours: 168 },
+]
+
 export default function Dashboard() {
   const navigate = useNavigate()
   const [stats, setStats] = useState(null)
@@ -42,6 +50,8 @@ export default function Dashboard() {
   const [addSubmitting, setAddSubmitting] = useState(false)
   const [checking, setChecking] = useState(false)
   const [deletingId, setDeletingId] = useState(null)
+  const [expandedUrlId, setExpandedUrlId] = useState(null)
+  const [historyHoursByUrl, setHistoryHoursByUrl] = useState({})
 
   const fetchAll = useCallback(async () => {
     setError('')
@@ -113,12 +123,26 @@ export default function Dashboard() {
     setDeletingId(id)
     try {
       await urlsApi.deleteUrl(id)
+      setExpandedUrlId((cur) => (cur === id ? null : cur))
+      setHistoryHoursByUrl((prev) => {
+        const next = { ...prev }
+        delete next[id]
+        return next
+      })
       await fetchAll()
     } catch (err) {
       setError(err.response?.data?.error ?? 'Failed to delete URL')
     } finally {
       setDeletingId(null)
     }
+  }
+
+  function toggleRowExpand(id) {
+    setExpandedUrlId((prev) => (prev === id ? null : id))
+  }
+
+  function setHistoryHoursForUrl(id, hours) {
+    setHistoryHoursByUrl((prev) => ({ ...prev, [id]: hours }))
   }
 
   const total = stats?.total ?? 0
@@ -239,59 +263,98 @@ export default function Dashboard() {
                       const latest = row.latestCheck
                       const st = latest?.status
                       const isUp = st === 'UP'
+                      const expanded = expandedUrlId === row.id
+                      const chartHours = historyHoursByUrl[row.id] ?? 24
                       return (
-                        <tr
-                          key={row.id}
-                          className="border-t border-border-custom transition hover:bg-hover"
-                        >
-                          <td className="max-w-[240px] px-4 py-3">
-                            <span
-                              className="block truncate font-mono text-white"
-                              title={row.address}
-                            >
-                              {row.address}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3 text-gray-300">
-                            {row.label ?? '—'}
-                          </td>
-                          <td className="px-4 py-3">
-                            {!latest ? (
-                              <span className="text-xs text-gray-500">—</span>
-                            ) : isUp ? (
-                              <span className="rounded-full bg-up/10 px-2 py-1 text-xs font-medium text-up">
-                                UP
+                        <Fragment key={row.id}>
+                          <tr
+                            onClick={() => toggleRowExpand(row.id)}
+                            className={`cursor-pointer border-t border-border-custom transition hover:bg-hover ${
+                              expanded ? 'bg-hover/50' : ''
+                            }`}
+                          >
+                            <td className="max-w-[240px] px-4 py-3">
+                              <span
+                                className="block truncate font-mono text-white"
+                                title={row.address}
+                              >
+                                {row.address}
                               </span>
-                            ) : (
-                              <span className="rounded-full bg-down/10 px-2 py-1 text-xs font-medium text-down">
-                                DOWN
-                              </span>
-                            )}
-                          </td>
-                          <td className="px-4 py-3 text-gray-300">
-                            {latest?.responseTime != null
-                              ? `${latest.responseTime} ms`
-                              : '—'}
-                          </td>
-                          <td className="px-4 py-3 text-gray-400">
-                            {formatRelativeTime(latest?.checkedAt)}
-                          </td>
-                          <td className="px-4 py-3 text-right">
-                            <button
-                              type="button"
-                              disabled={deletingId === row.id}
-                              onClick={() => handleDelete(row.id)}
-                              className="inline-flex rounded p-1.5 text-gray-400 transition hover:bg-hover hover:text-down disabled:opacity-50"
-                              aria-label="Delete URL"
-                            >
-                              {deletingId === row.id ? (
-                                <Loader2 className="h-4 w-4 animate-spin" />
+                            </td>
+                            <td className="px-4 py-3 text-gray-300">
+                              {row.label ?? '—'}
+                            </td>
+                            <td className="px-4 py-3">
+                              {!latest ? (
+                                <span className="text-xs text-gray-500">—</span>
+                              ) : isUp ? (
+                                <span className="rounded-full bg-up/10 px-2 py-1 text-xs font-medium text-up">
+                                  UP
+                                </span>
                               ) : (
-                                <Trash2 className="h-4 w-4" />
+                                <span className="rounded-full bg-down/10 px-2 py-1 text-xs font-medium text-down">
+                                  DOWN
+                                </span>
                               )}
-                            </button>
-                          </td>
-                        </tr>
+                            </td>
+                            <td className="px-4 py-3 text-gray-300">
+                              {latest?.responseTime != null
+                                ? `${latest.responseTime} ms`
+                                : '—'}
+                            </td>
+                            <td className="px-4 py-3 text-gray-400">
+                              {formatRelativeTime(latest?.checkedAt)}
+                            </td>
+                            <td className="px-4 py-3 text-right">
+                              <button
+                                type="button"
+                                disabled={deletingId === row.id}
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  handleDelete(row.id)
+                                }}
+                                className="inline-flex rounded p-1.5 text-gray-400 transition hover:bg-hover hover:text-down disabled:opacity-50"
+                                aria-label="Delete URL"
+                              >
+                                {deletingId === row.id ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <Trash2 className="h-4 w-4" />
+                                )}
+                              </button>
+                            </td>
+                          </tr>
+                          {expanded ? (
+                            <tr className="border-t border-border-custom bg-background">
+                              <td colSpan={6} className="px-4 pb-4 pt-0">
+                                <div className="mt-2 rounded-xl border border-border-custom bg-card p-4">
+                                  <div className="mb-4 flex flex-wrap gap-2">
+                                    {HISTORY_PRESETS.map(({ label, hours }) => (
+                                      <button
+                                        key={label}
+                                        type="button"
+                                        onClick={() =>
+                                          setHistoryHoursForUrl(row.id, hours)
+                                        }
+                                        className={`rounded-lg px-3 py-1.5 text-sm font-medium transition ${
+                                          chartHours === hours
+                                            ? 'bg-accent text-white'
+                                            : 'bg-hover text-gray-400 hover:text-white'
+                                        }`}
+                                      >
+                                        {label}
+                                      </button>
+                                    ))}
+                                  </div>
+                                  <UrlHistoryChart
+                                    urlId={row.id}
+                                    hours={chartHours}
+                                  />
+                                </div>
+                              </td>
+                            </tr>
+                          ) : null}
+                        </Fragment>
                       )
                     })
                   )}
