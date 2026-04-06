@@ -1,0 +1,32 @@
+import client from './client.js'
+
+export async function getUrls() {
+  const { data } = await client.get('/urls')
+  return data
+}
+
+export async function addUrls(urls) {
+  const { data } = await client.post('/urls', { urls })
+  return data
+}
+
+export async function deleteUrl(id) {
+  await client.delete(`/urls/${id}`)
+}
+
+export async function triggerCheck() {
+  const { data } = await client.post('/urls/check')
+  return data
+}
+
+export async function getStats() {
+  const { data } = await client.get('/urls/stats')
+  return data
+}
+
+export async function getHistory(id, hours = 24) {
+  const { data } = await client.get(`/urls/${id}/history`, {
+    params: hours != null ? { hours } : {},
+  })
+  return data
+}
