@@ -22,6 +22,31 @@ services:
       - redis_data:/data
     command: redis-server --appendonly yes
 
+  backend:
+    build: ./backend
+    container_name: endwatch-backend
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env
+    environment:
+      PORT: 5001
+      DATABASE_URL: "postgresql://urlmonitor:urlmonitor@postgres:5432/urlmonitor"
+      REDIS_URL: "redis://redis:6379"
+    depends_on:
+      - postgres
+      - redis
+    ports:
+      - "5001:5001"
+
+  frontend:
+    build: ./frontend
+    container_name: endwatch-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "5173:5173"
+
 volumes:
   postgres_data:
   redis_data:
