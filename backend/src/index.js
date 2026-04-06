@@ -11,6 +11,8 @@ import urlRoutes from "./routes/urls.js";
 import { errorHandler } from "./middleware/errorHandler.js";
 import { requestLogger } from "./middleware/requestLogger.js";
 import { logger } from "./utils/logger.js";
+import { processQueue } from "./services/queue.js";
+import { startScheduler } from "./services/scheduler.js";
 
 const app = express();
 const port = Number(process.env.PORT) || 5000;
@@ -23,6 +25,9 @@ app.use("/api/urls", urlRoutes);
 app.use("/api", routes);
 
 app.use(errorHandler);
+
+processQueue();
+startScheduler();
 
 app.listen(port, () => {
   logger.info(`Server listening on port ${port}`);
