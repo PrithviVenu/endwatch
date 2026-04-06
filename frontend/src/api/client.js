@@ -18,6 +18,7 @@ client.interceptors.response.use(
     if (error.response?.status === 401) {
       localStorage.removeItem('accessToken')
       localStorage.removeItem('refreshToken')
+      localStorage.removeItem('user')
       const path = window.location.pathname
       if (path !== '/login' && path !== '/signup') {
         window.location.assign('/login')

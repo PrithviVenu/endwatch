@@ -17,6 +17,7 @@ export default function SignupPage() {
       const data = await authApi.signup(email, password)
       localStorage.setItem('accessToken', data.accessToken)
       localStorage.setItem('refreshToken', data.refreshToken)
+      localStorage.setItem('user', JSON.stringify(data.user))
       navigate('/dashboard', { replace: true })
     } catch (err) {
       setError(err.response?.data?.error ?? 'Sign up failed')
@@ -26,47 +27,52 @@ export default function SignupPage() {
   }
 
   return (
-    <div className="flex min-h-svh items-center justify-center p-6">
-      <div className="w-full max-w-md rounded-lg border border-border-custom bg-card p-8">
-        <h1 className="mb-6 text-2xl font-semibold text-white">Create account</h1>
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+    <div className="flex min-h-screen items-center justify-center bg-background px-6">
+      <div className="w-full max-w-md rounded-xl border border-border-custom bg-card p-8">
+        <h1 className="text-center text-2xl font-semibold tracking-tight text-white">
+          Endwatch
+        </h1>
+        <p className="mt-2 text-center text-sm text-gray-400">Create your account</p>
+
+        <form onSubmit={handleSubmit} className="mt-8 space-y-4">
           {error ? (
-            <p className="text-sm text-down" role="alert">
+            <p className="mt-2 text-sm text-down" role="alert">
               {error}
             </p>
           ) : null}
-          <label className="flex flex-col gap-1 text-left text-sm">
-            <span className="text-white/80">Email</span>
-            <input
-              type="email"
-              autoComplete="email"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="rounded border border-border-custom bg-background px-3 py-2 text-white outline-none focus:border-accent"
-            />
-          </label>
-          <label className="flex flex-col gap-1 text-left text-sm">
-            <span className="text-white/80">Password</span>
-            <input
-              type="password"
-              autoComplete="new-password"
-              required
-              minLength={8}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="rounded border border-border-custom bg-background px-3 py-2 text-white outline-none focus:border-accent"
-            />
-          </label>
+
+          <input
+            type="email"
+            name="email"
+            autoComplete="email"
+            required
+            placeholder="Email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className="w-full rounded-lg border border-border-custom bg-hover px-4 py-3 text-white placeholder-gray-500 focus:border-accent focus:outline-none"
+          />
+          <input
+            type="password"
+            name="password"
+            autoComplete="new-password"
+            required
+            minLength={8}
+            placeholder="Password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className="w-full rounded-lg border border-border-custom bg-hover px-4 py-3 text-white placeholder-gray-500 focus:border-accent focus:outline-none"
+          />
+
           <button
             type="submit"
             disabled={loading}
-            className="mt-2 rounded bg-accent py-2 font-medium text-white hover:opacity-90 disabled:opacity-50"
+            className="w-full rounded-lg bg-accent py-3 font-medium text-white transition hover:opacity-90 disabled:opacity-50"
           >
-            {loading ? 'Creating…' : 'Sign up'}
+            {loading ? 'Creating account…' : 'Create account'}
           </button>
         </form>
-        <p className="mt-6 text-center text-sm text-white/60">
+
+        <p className="mt-8 text-center text-sm text-gray-400">
           Already have an account?{' '}
           <Link to="/login" className="text-accent hover:underline">
             Sign in
