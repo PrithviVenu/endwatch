@@ -17,7 +17,7 @@ import { startScheduler } from "./services/scheduler.js";
 
 const app = express();
 app.set('trust proxy', 1)
-const port = Number(process.env.PORT) || 5000;
+const port = Number(process.env.PORT) || 5001;
 
 const globalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
