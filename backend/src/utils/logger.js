@@ -41,3 +41,9 @@ export const logger = winston.createLogger({
   format: isProd ? prodFormat : devFormat,
   transports: [new winston.transports.Console()],
 });
+
+export function withCorrelationId(correlationId) {
+  if (!correlationId) return logger;
+  // winston supports child loggers; this keeps correlationId on every log line/object
+  return logger.child({ correlationId });
+}

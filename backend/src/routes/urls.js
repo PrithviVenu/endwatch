@@ -116,7 +116,7 @@ router.post("/check", async (req, res) => {
     where: { userId: req.user.id },
   });
 
-  runChecksForUrls(urls).catch((err) => {
+  runChecksForUrls(urls, req.correlationId).catch((err) => {
     logger.error(err);
   });
 
