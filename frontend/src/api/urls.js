@@ -30,3 +30,8 @@ export async function getHistory(id, hours = 24) {
   })
   return data
 }
+
+export async function getSla(id) {
+  const { data } = await client.get(`/urls/${id}/sla`)
+  return data
+}

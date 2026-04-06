@@ -52,6 +52,8 @@ export default function Dashboard() {
   const [deletingId, setDeletingId] = useState(null)
   const [expandedUrlId, setExpandedUrlId] = useState(null)
   const [historyHoursByUrl, setHistoryHoursByUrl] = useState({})
+  const [slaByUrl, setSlaByUrl] = useState({})
+  const [slaLoadingByUrl, setSlaLoadingByUrl] = useState({})
 
   const fetchAll = useCallback(async () => {
     setError('')
@@ -129,6 +131,16 @@ export default function Dashboard() {
         delete next[id]
         return next
       })
+      setSlaByUrl((prev) => {
+        const next = { ...prev }
+        delete next[id]
+        return next
+      })
+      setSlaLoadingByUrl((prev) => {
+        const next = { ...prev }
+        delete next[id]
+        return next
+      })
       await fetchAll()
     } catch (err) {
       setError(err.response?.data?.error ?? 'Failed to delete URL')
@@ -137,12 +149,30 @@ export default function Dashboard() {
     }
   }
 
-  function toggleRowExpand(id) {
+  async function toggleRowExpand(id) {
     setExpandedUrlId((prev) => (prev === id ? null : id))
+    if (slaByUrl[id] || slaLoadingByUrl[id]) return
+    setSlaLoadingByUrl((prev) => ({ ...prev, [id]: true }))
+    try {
+      const data = await urlsApi.getSla(id)
+      setSlaByUrl((prev) => ({ ...prev, [id]: data }))
+    } catch (err) {
+      setError(err.response?.data?.error ?? 'Failed to load SLA metrics')
+    } finally {
+      setSlaLoadingByUrl((prev) => ({ ...prev, [id]: false }))
+    }
   }
 
   function setHistoryHoursForUrl(id, hours) {
     setHistoryHoursByUrl((prev) => ({ ...prev, [id]: hours }))
+  }
+
+  function uptimeColorClass(pct) {
+    if (pct == null || Number.isNaN(Number(pct))) return 'text-gray-400'
+    const n = Number(pct)
+    if (n >= 99) return 'text-up'
+    if (n >= 95) return 'text-accent'
+    return 'text-down'
   }
 
   const total = stats?.total ?? 0
@@ -265,6 +295,8 @@ export default function Dashboard() {
                       const isUp = st === 'UP'
                       const expanded = expandedUrlId === row.id
                       const chartHours = historyHoursByUrl[row.id] ?? 24
+                      const sla = slaByUrl[row.id]
+                      const slaLoading = slaLoadingByUrl[row.id]
                       return (
                         <Fragment key={row.id}>
                           <tr
@@ -350,6 +382,61 @@ export default function Dashboard() {
                                     urlId={row.id}
                                     hours={chartHours}
                                   />
+
+                                  <div className="mt-4 grid gap-3 md:grid-cols-3">
+                                    {['24h', '7d', '30d'].map((k) => {
+                                      const m = sla?.[k]
+                                      const pct = m?.uptimePct
+                                      return (
+                                        <div
+                                          key={k}
+                                          className="rounded-xl border border-border-custom bg-card p-4"
+                                        >
+                                          <p className="text-xs uppercase tracking-wider text-gray-400">
+                                            {k}
+                                          </p>
+                                          {slaLoading ? (
+                                            <div className="mt-3 flex items-center gap-2 text-gray-400">
+                                              <Loader2 className="h-4 w-4 animate-spin" />
+                                              <span className="text-sm">Loading…</span>
+                                            </div>
+                                          ) : (
+                                            <>
+                                              <p
+                                                className={`mt-2 text-3xl font-bold ${uptimeColorClass(
+                                                  pct,
+                                                )}`}
+                                              >
+                                                {formatUptime(pct)}
+                                              </p>
+                                              <div className="mt-3 space-y-1 text-sm text-gray-400">
+                                                <p>
+                                                  Checks:{' '}
+                                                  <span className="text-white">
+                                                    {m?.totalChecks ?? 0}
+                                                  </span>
+                                                </p>
+                                                <p>
+                                                  Failures:{' '}
+                                                  <span className="text-white">
+                                                    {m?.failures ?? 0}
+                                                  </span>
+                                                </p>
+                                                <p>
+                                                  Avg RT:{' '}
+                                                  <span className="text-white">
+                                                    {m?.avgResponseTime != null
+                                                      ? `${m.avgResponseTime} ms`
+                                                      : '—'}
+                                                  </span>
+                                                </p>
+                                              </div>
+                                            </>
+                                          )}
+                                        </div>
+                                      )
+                                    })}
+                                  </div>
                                 </div>
                               </td>
                             </tr>

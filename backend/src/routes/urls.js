@@ -194,6 +194,58 @@ router.delete("/:id", async (req, res) => {
   res.status(204).send();
 });
 
+router.get("/:id/sla", async (req, res) => {
+  const { id } = req.params;
+
+  const url = await prisma.url.findFirst({
+    where: { id, userId: req.user.id },
+    select: { id: true },
+  });
+
+  if (!url) {
+    return res.status(404).json({ error: "URL not found" });
+  }
+
+  async function calc(periodMs) {
+    const since = new Date(Date.now() - periodMs);
+
+    const [totalChecks, failures, avg] = await Promise.all([
+      prisma.checkResult.count({
+        where: { urlId: id, checkedAt: { gte: since } },
+      }),
+      prisma.checkResult.count({
+        where: { urlId: id, checkedAt: { gte: since }, status: "DOWN" },
+      }),
+      prisma.checkResult.aggregate({
+        where: { urlId: id, checkedAt: { gte: since } },
+        _avg: { responseTime: true },
+      }),
+    ]);
+
+    const uptimePct =
+      totalChecks === 0
+        ? null
+        : Math.round(((totalChecks - failures) / totalChecks) * 10000) / 100;
+
+    const avgResponseTime =
+      avg?._avg?.responseTime == null ? null : Math.round(avg._avg.responseTime);
+
+    return { uptimePct, totalChecks, failures, avgResponseTime };
+  }
+
+  const [p24h, p7d, p30d] = await Promise.all([
+    calc(24 * 60 * 60 * 1000),
+    calc(7 * 24 * 60 * 60 * 1000),
+    calc(30 * 24 * 60 * 60 * 1000),
+  ]);
+
+  res.json({
+    "24h": p24h,
+    "7d": p7d,
+    "30d": p30d,
+  });
+});
+
 router.get("/:id/history", async (req, res) => {
   const { id } = req.params;
   const rawHours = req.query.hours;
