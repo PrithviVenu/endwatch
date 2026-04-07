@@ -27,6 +27,22 @@ export async function resendVerification(email) {
   return data
 }
 
+export async function forgotPassword(email) {
+  const { data } = await axios.post(
+    `${client.defaults.baseURL}/auth/forgot-password`,
+    { email },
+  )
+  return data
+}
+
+export async function resetPassword(token, password) {
+  const { data } = await axios.post(
+    `${client.defaults.baseURL}/auth/reset-password`,
+    { token, password },
+  )
+  return data
+}
+
 export async function refresh(token) {
   const { data } = await client.post('/auth/refresh', { refreshToken: token })
   return data

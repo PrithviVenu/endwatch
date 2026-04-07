@@ -8,6 +8,7 @@ export default function LoginPage() {
   const navigate = useNavigate()
   const location = useLocation()
   const registered = location.state?.registered === true
+  const passwordReset = location.state?.passwordReset === true
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -73,6 +74,11 @@ export default function LoginPage() {
               Account created. Check your inbox to verify your email, then sign in.
             </p>
           ) : null}
+          {passwordReset ? (
+            <p className="text-sm text-up" role="status">
+              Password reset successful. You can sign in now.
+            </p>
+          ) : null}
 
           {error ? (
             <p className="mt-2 text-sm text-down" role="alert">
@@ -116,6 +122,11 @@ export default function LoginPage() {
             onChange={(e) => setPassword(e.target.value)}
             className="w-full rounded-lg border border-border-custom bg-hover px-4 py-3 text-white placeholder-gray-500 focus:border-accent focus:outline-none"
           />
+          <div className="flex justify-end">
+            <Link to="/forgot-password" className="text-sm text-accent hover:underline">
+              Forgot password?
+            </Link>
+          </div>
 
           <button
             type="submit"

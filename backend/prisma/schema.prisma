@@ -25,6 +25,8 @@ model User {
   emailVerified      Boolean   @default(false)
   verifyToken        String?   @unique
   verifyTokenExpiry  DateTime?
+  resetToken         String?   @unique
+  resetTokenExpiry   DateTime?
   createdAt          DateTime  @default(now())
   urls               Url[]
 }

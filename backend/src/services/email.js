@@ -230,3 +230,77 @@ export function sendVerificationEmail(userEmail, verifyToken) {
     });
   }
 }
+
+/**
+ * Sends password reset email. No-op if RESEND_API_KEY is unset.
+ * Fire-and-forget; never throws.
+ */
+export function sendPasswordResetEmail(userEmail, resetToken) {
+  try {
+    if (!apiKey || !resend) {
+      return;
+    }
+    const from = process.env.ALERT_FROM_EMAIL;
+    if (!from) {
+      return;
+    }
+
+    const resetUrl = `${FRONTEND_URL}/reset-password?token=${encodeURIComponent(
+      resetToken
+    )}`;
+    const safeLink = escapeHtml(resetUrl);
+
+    const html = `
+<!DOCTYPE html>
+<html>
+  <body style="font-family: system-ui, -apple-system, sans-serif; line-height: 1.6; color: #e5e7eb; background: #0f1419; margin: 0; padding: 24px;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width: 480px; margin: 0 auto;">
+      <tr>
+        <td style="background: #1a2332; border-radius: 12px; padding: 32px; border: 1px solid #2d3a4d;">
+          <h1 style="margin: 0 0 8px; font-size: 22px; color: #f9fafb;">Reset your Endwatch password</h1>
+          <p style="margin: 0 0 24px; color: #9ca3af; font-size: 15px;">
+            Click the button below to reset your password. This link expires in 1 hour.
+          </p>
+          <a href="${resetUrl}" style="display: inline-block; background: #3b82f6; color: #ffffff; text-decoration: none; font-weight: 600; padding: 12px 24px; border-radius: 8px; font-size: 15px;">
+            Reset password
+          </a>
+          <p style="margin: 24px 0 0; font-size: 13px; color: #6b7280;">
+            Or copy this link into your browser:<br />
+            <span style="word-break: break-all; color: #9ca3af;">${safeLink}</span>
+          </p>
+          <p style="margin: 16px 0 0; font-size: 12px; color: #6b7280;">
+            If you did not request a password reset, you can ignore this email.
+          </p>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>
+`.trim();
+
+    void (async () => {
+      try {
+        await resend.emails.send({
+          from,
+          to: userEmail,
+          subject: "Reset your Endwatch password",
+          html,
+        });
+        logger.info({
+          msg: "password_reset_email_sent",
+          userEmail,
+        });
+      } catch (e) {
+        logger.error({
+          msg: "password_reset_email_failed",
+          error: e instanceof Error ? e.message : String(e),
+        });
+      }
+    })();
+  } catch (e) {
+    logger.error({
+      msg: "password_reset_email_failed",
+      error: e instanceof Error ? e.message : String(e),
+    });
+  }
+}

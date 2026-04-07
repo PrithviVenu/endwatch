@@ -4,7 +4,7 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { Prisma } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
-import { sendVerificationEmail } from "../services/email.js";
+import { sendPasswordResetEmail, sendVerificationEmail } from "../services/email.js";
 
 const router = Router();
 
@@ -12,6 +12,7 @@ const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MIN_PASSWORD_LENGTH = 8;
 
 const VERIFY_EMAIL_MESSAGE = "Please verify your email before continuing";
+const INVALID_RESET_TOKEN_MESSAGE = "Invalid or expired reset token";
 
 function sanitizeUser(user) {
   return {
@@ -115,6 +116,77 @@ router.post("/resend-verification", async (req, res) => {
     success: true,
     message: "If this email is registered and not verified, a new link was sent.",
   });
+});
+
+router.post("/forgot-password", async (req, res) => {
+  const email = req.body?.email;
+  if (!email || typeof email !== "string" || !EMAIL_REGEX.test(email.trim())) {
+    return res.status(200).json({
+      success: true,
+      message: "If that email exists, a reset link has been sent",
+    });
+  }
+
+  const normalizedEmail = email.trim().toLowerCase();
+  const user = await prisma.user.findUnique({
+    where: { email: normalizedEmail },
+  });
+
+  if (user) {
+    const resetToken = crypto.randomBytes(32).toString("hex");
+    const resetTokenExpiry = new Date(Date.now() + 60 * 60 * 1000);
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { resetToken, resetTokenExpiry },
+    });
+    sendPasswordResetEmail(normalizedEmail, resetToken);
+  }
+
+  return res.status(200).json({
+    success: true,
+    message: "If that email exists, a reset link has been sent",
+  });
+});
+
+router.post("/reset-password", async (req, res) => {
+  const token = req.body?.token;
+  const password = req.body?.password;
+
+  if (!token || typeof token !== "string") {
+    return res.status(400).json({ error: INVALID_RESET_TOKEN_MESSAGE });
+  }
+  if (!password || typeof password !== "string") {
+    return res.status(400).json({ error: "Password is required" });
+  }
+  if (password.length < MIN_PASSWORD_LENGTH) {
+    return res
+      .status(400)
+      .json({ error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters` });
+  }
+
+  const now = new Date();
+  const user = await prisma.user.findFirst({
+    where: {
+      resetToken: token,
+      resetTokenExpiry: { gt: now },
+    },
+  });
+
+  if (!user) {
+    return res.status(400).json({ error: INVALID_RESET_TOKEN_MESSAGE });
+  }
+
+  const passwordHash = await bcrypt.hash(password, 12);
+  await prisma.user.update({
+    where: { id: user.id },
+    data: {
+      passwordHash,
+      resetToken: null,
+      resetTokenExpiry: null,
+    },
+  });
+
+  return res.json({ success: true });
 });
 
 router.post("/signup", async (req, res) => {
