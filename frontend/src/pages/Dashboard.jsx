@@ -9,6 +9,7 @@ import {
   Plus,
   RefreshCw,
   Trash2,
+  X,
 } from 'lucide-react'
 import * as urlsApi from '../api/urls.js'
 import UrlHistoryChart from '../components/UrlHistoryChart.jsx'
@@ -38,6 +39,10 @@ const HISTORY_PRESETS = [
   { label: '7d', hours: 168 },
 ]
 
+function createEmptyUrlRow() {
+  return { id: crypto.randomUUID(), address: '', label: '' }
+}
+
 export default function Dashboard() {
   const navigate = useNavigate()
   const [stats, setStats] = useState(null)
@@ -45,7 +50,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [addOpen, setAddOpen] = useState(false)
-  const [addText, setAddText] = useState('')
+  const [addUrlRows, setAddUrlRows] = useState(() => [createEmptyUrlRow()])
   const [addIntervalMin, setAddIntervalMin] = useState(5)
   const [addSubmitting, setAddSubmitting] = useState(false)
   const [checking, setChecking] = useState(false)
@@ -86,19 +91,23 @@ export default function Dashboard() {
 
   async function handleAddUrls(e) {
     e.preventDefault()
-    const lines = addText
-      .split('\n')
-      .map((s) => s.trim())
+    const parsed = addUrlRows
+      .map(({ address, label }) => {
+        const a = address.trim()
+        if (!a) return null
+        const l = label.trim()
+        return l === '' ? { address: a } : { address: a, label: l }
+      })
       .filter(Boolean)
-    if (lines.length === 0) return
+    if (parsed.length === 0) return
     setAddSubmitting(true)
     try {
-      const urls = lines.map((address) => ({
-        address,
+      const urls = parsed.map((item) => ({
+        ...item,
         intervalMin: addIntervalMin,
       }))
       await urlsApi.addUrls(urls)
-      setAddText('')
+      setAddUrlRows([createEmptyUrlRow()])
       setAddIntervalMin(5)
       setAddOpen(false)
       await fetchAll()
@@ -189,6 +198,7 @@ export default function Dashboard() {
             type="button"
             onClick={() => {
               setAddIntervalMin(5)
+              setAddUrlRows([createEmptyUrlRow()])
               setAddOpen(true)
             }}
             className="flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-white hover:opacity-90"
@@ -469,15 +479,73 @@ export default function Dashboard() {
               Add URLs
             </h2>
             <p className="mt-1 text-sm text-gray-400">
-              One URL per line. Duplicates for your account are updated.
+              Duplicates for your account are updated.
             </p>
-            <form onSubmit={handleAddUrls} className="mt-4">
-              <textarea
-                value={addText}
-                onChange={(e) => setAddText(e.target.value)}
-                placeholder="https://example.com&#10;https://another.org"
-                className="h-32 w-full rounded-lg border border-border-custom bg-hover p-3 text-white placeholder-gray-500 focus:border-accent focus:outline-none"
-              />
+            <form onSubmit={handleAddUrls} className="mt-4 space-y-3">
+              <div className="space-y-2">
+                {addUrlRows.map((row) => (
+                  <div
+                    key={row.id}
+                    className="flex items-center gap-2"
+                  >
+                    <input
+                      type="text"
+                      inputMode="url"
+                      autoComplete="url"
+                      value={row.address}
+                      onChange={(e) => {
+                        const v = e.target.value
+                        setAddUrlRows((rows) =>
+                          rows.map((r) =>
+                            r.id === row.id ? { ...r, address: v } : r,
+                          ),
+                        )
+                      }}
+                      placeholder="https://google.com"
+                      className="min-w-0 flex-1 rounded-lg border border-border-custom bg-hover px-3 py-2 text-white placeholder-gray-500 focus:border-accent focus:outline-none"
+                    />
+                    <input
+                      type="text"
+                      value={row.label}
+                      onChange={(e) => {
+                        const v = e.target.value
+                        setAddUrlRows((rows) =>
+                          rows.map((r) =>
+                            r.id === row.id ? { ...r, label: v } : r,
+                          ),
+                        )
+                      }}
+                      placeholder="Label (optional)"
+                      className="w-[200px] shrink-0 rounded-lg border border-border-custom bg-hover px-3 py-2 text-white placeholder-gray-500 focus:border-accent focus:outline-none"
+                    />
+                    <button
+                      type="button"
+                      disabled={addUrlRows.length <= 1 || addSubmitting}
+                      onClick={() =>
+                        setAddUrlRows((rows) =>
+                          rows.length <= 1
+                            ? rows
+                            : rows.filter((r) => r.id !== row.id),
+                        )
+                      }
+                      className="shrink-0 rounded p-2 text-gray-400 transition hover:text-down disabled:pointer-events-none disabled:opacity-30"
+                      aria-label="Remove row"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <button
+                type="button"
+                disabled={addSubmitting}
+                onClick={() =>
+                  setAddUrlRows((rows) => [...rows, createEmptyUrlRow()])
+                }
+                className="text-sm text-accent hover:underline disabled:opacity-50"
+              >
+                + Add another URL
+              </button>
               <label className="mt-4 block text-sm text-gray-400">
                 Check interval (applies to all URLs)
                 <select
