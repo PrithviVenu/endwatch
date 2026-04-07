@@ -1,3 +1,4 @@
+// Client routes: also add non-root paths to ../spaPaths.js for static hosting.
 import { Navigate, Route, Routes } from 'react-router-dom'
 import Dashboard from './pages/Dashboard.jsx'
 import LoginPage from './pages/LoginPage.jsx'
