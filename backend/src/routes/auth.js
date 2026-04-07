@@ -1,19 +1,24 @@
+import crypto from "crypto";
 import { Router } from "express";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { Prisma } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
+import { sendVerificationEmail } from "../services/email.js";
 
 const router = Router();
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MIN_PASSWORD_LENGTH = 8;
 
+const VERIFY_EMAIL_MESSAGE = "Please verify your email before continuing";
+
 function sanitizeUser(user) {
   return {
     id: user.id,
     email: user.email,
     role: user.role,
+    emailVerified: user.emailVerified,
     createdAt: user.createdAt,
   };
 }
@@ -52,6 +57,66 @@ function issueTokens(user) {
   };
 }
 
+router.get("/verify-email", async (req, res) => {
+  const token =
+    typeof req.query.token === "string" ? req.query.token.trim() : "";
+  if (!token) {
+    return res.status(400).json({ error: "Verification token is required" });
+  }
+
+  const now = new Date();
+  const user = await prisma.user.findFirst({
+    where: {
+      verifyToken: token,
+      verifyTokenExpiry: { gt: now },
+    },
+  });
+
+  if (!user) {
+    return res.status(400).json({
+      error: "Invalid or expired verification link",
+    });
+  }
+
+  await prisma.user.update({
+    where: { id: user.id },
+    data: {
+      emailVerified: true,
+      verifyToken: null,
+      verifyTokenExpiry: null,
+    },
+  });
+
+  return res.json({ success: true });
+});
+
+router.post("/resend-verification", async (req, res) => {
+  const email = req.body?.email;
+  if (!email || typeof email !== "string" || !EMAIL_REGEX.test(email.trim())) {
+    return res.status(400).json({ error: "Valid email is required" });
+  }
+
+  const normalizedEmail = email.trim().toLowerCase();
+  const user = await prisma.user.findUnique({
+    where: { email: normalizedEmail },
+  });
+
+  if (user && !user.emailVerified) {
+    const verifyToken = crypto.randomBytes(32).toString("hex");
+    const verifyTokenExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { verifyToken, verifyTokenExpiry },
+    });
+    sendVerificationEmail(normalizedEmail, verifyToken);
+  }
+
+  return res.json({
+    success: true,
+    message: "If this email is registered and not verified, a new link was sent.",
+  });
+});
+
 router.post("/signup", async (req, res) => {
   const { email, password } = req.body ?? {};
 
@@ -69,14 +134,20 @@ router.post("/signup", async (req, res) => {
 
   const normalizedEmail = email.trim().toLowerCase();
   const passwordHash = await bcrypt.hash(password, 12);
+  const verifyToken = crypto.randomBytes(32).toString("hex");
+  const verifyTokenExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000);
 
   try {
     const user = await prisma.user.create({
       data: {
         email: normalizedEmail,
         passwordHash,
+        emailVerified: false,
+        verifyToken,
+        verifyTokenExpiry,
       },
     });
+    sendVerificationEmail(normalizedEmail, verifyToken);
     const tokens = issueTokens(user);
     return res.status(201).json(tokens);
   } catch (e) {
@@ -109,6 +180,10 @@ router.post("/login", async (req, res) => {
   const match = await bcrypt.compare(password, user.passwordHash);
   if (!match) {
     return res.status(401).json({ error: "Invalid email or password" });
+  }
+
+  if (!user.emailVerified) {
+    return res.status(403).json({ error: VERIFY_EMAIL_MESSAGE });
   }
 
   const tokens = issueTokens(user);
@@ -150,6 +225,10 @@ router.post("/refresh", async (req, res) => {
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user) {
     return res.status(401).json({ error: "User not found" });
+  }
+
+  if (!user.emailVerified) {
+    return res.status(403).json({ error: VERIFY_EMAIL_MESSAGE });
   }
 
   const accessToken = signAccessToken(user);

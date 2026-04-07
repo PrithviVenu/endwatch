@@ -153,3 +153,80 @@ export function sendRecoveryAlert(userEmail, urlAddress) {
     });
   }
 }
+
+const FRONTEND_URL =
+  process.env.FRONTEND_URL?.replace(/\/$/, "") || "http://localhost:5173";
+
+/**
+ * Sends account verification email. No-op if RESEND_API_KEY is unset.
+ * Fire-and-forget; never throws.
+ */
+export function sendVerificationEmail(userEmail, verifyToken) {
+  try {
+    if (!apiKey || !resend) {
+      return;
+    }
+    const from = process.env.ALERT_FROM_EMAIL;
+    if (!from) {
+      return;
+    }
+
+    const verifyUrl = `${FRONTEND_URL}/verify-email?token=${encodeURIComponent(
+      verifyToken
+    )}`;
+    const safeLink = escapeHtml(verifyUrl);
+
+    const html = `
+<!DOCTYPE html>
+<html>
+  <body style="font-family: system-ui, -apple-system, sans-serif; line-height: 1.6; color: #e5e7eb; background: #0f1419; margin: 0; padding: 24px;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width: 480px; margin: 0 auto;">
+      <tr>
+        <td style="background: #1a2332; border-radius: 12px; padding: 32px; border: 1px solid #2d3a4d;">
+          <h1 style="margin: 0 0 8px; font-size: 22px; color: #f9fafb;">Verify your Endwatch account</h1>
+          <p style="margin: 0 0 24px; color: #9ca3af; font-size: 15px;">
+            Thanks for signing up. Click the button below to verify your email and start monitoring your URLs.
+          </p>
+          <a href="${verifyUrl}" style="display: inline-block; background: #3b82f6; color: #ffffff; text-decoration: none; font-weight: 600; padding: 12px 24px; border-radius: 8px; font-size: 15px;">
+            Verify email
+          </a>
+          <p style="margin: 24px 0 0; font-size: 13px; color: #6b7280;">
+            Or copy this link into your browser:<br />
+            <span style="word-break: break-all; color: #9ca3af;">${safeLink}</span>
+          </p>
+          <p style="margin: 16px 0 0; font-size: 12px; color: #6b7280;">
+            This link expires in 24 hours. If you did not create an account, you can ignore this email.
+          </p>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>
+`.trim();
+
+    void (async () => {
+      try {
+        await resend.emails.send({
+          from,
+          to: userEmail,
+          subject: "Verify your Endwatch account",
+          html,
+        });
+        logger.info({
+          msg: "verification_email_sent",
+          userEmail,
+        });
+      } catch (e) {
+        logger.error({
+          msg: "verification_email_failed",
+          error: e instanceof Error ? e.message : String(e),
+        });
+      }
+    })();
+  } catch (e) {
+    logger.error({
+      msg: "verification_email_failed",
+      error: e instanceof Error ? e.message : String(e),
+    });
+  }
+}

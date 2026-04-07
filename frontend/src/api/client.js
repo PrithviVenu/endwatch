@@ -20,7 +20,11 @@ client.interceptors.response.use(
       localStorage.removeItem('refreshToken')
       localStorage.removeItem('user')
       const path = window.location.pathname
-      if (path !== '/login' && path !== '/signup') {
+      if (
+        path !== '/login' &&
+        path !== '/signup' &&
+        path !== '/verify-email'
+      ) {
         window.location.assign('/login')
       }
     }

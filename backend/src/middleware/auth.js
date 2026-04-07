@@ -30,10 +30,17 @@ export async function authenticate(req, res, next) {
     return res.status(401).json({ error: "User not found" });
   }
 
+  if (!user.emailVerified) {
+    return res
+      .status(403)
+      .json({ error: "Please verify your email before continuing" });
+  }
+
   req.user = {
     id: user.id,
     email: user.email,
     role: user.role,
+    emailVerified: user.emailVerified,
     createdAt: user.createdAt,
   };
 

@@ -15,10 +15,17 @@ export default function SignupPage() {
     setLoading(true)
     try {
       const data = await authApi.signup(email, password)
-      localStorage.setItem('accessToken', data.accessToken)
-      localStorage.setItem('refreshToken', data.refreshToken)
-      localStorage.setItem('user', JSON.stringify(data.user))
-      navigate('/dashboard', { replace: true })
+      if (data.user?.emailVerified) {
+        localStorage.setItem('accessToken', data.accessToken)
+        localStorage.setItem('refreshToken', data.refreshToken)
+        localStorage.setItem('user', JSON.stringify(data.user))
+        navigate('/dashboard', { replace: true })
+      } else {
+        navigate('/login', {
+          replace: true,
+          state: { registered: true },
+        })
+      }
     } catch (err) {
       setError(err.response?.data?.error ?? 'Sign up failed')
     } finally {
