@@ -11,6 +11,8 @@ docker-compose up --build
 ```
 Open http://localhost:5173
 
+Edit `docker-compose.yml` / `frontend/.env` if the API is not at `http://localhost:5001/api` (for example when deploying). Vite reads variables prefixed with `VITE_` at build time.
+
 ## Tech Stack
 | Layer | Technology | Purpose |
 |-------|-----------|---------|
@@ -43,7 +45,7 @@ Tradeoff: all checks fire at once — at scale this needs throttling
 with a concurrency limiter.
 
 ### Polling over WebSockets
-30-second polling provides a near-real-time feel while staying simple
+The dashboard polls the API every 10 seconds for a near-real-time feel while staying simple
 to implement and debug. Sufficient for check intervals of 1-5 minutes.
 Tradeoff: slight latency vs true real-time, minor extra server load.
 
