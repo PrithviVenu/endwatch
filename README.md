@@ -7,6 +7,7 @@ A full-stack platform to monitor URL health, track uptime, and visualize respons
 git clone https://github.com/PrithviVenu/endwatch.git
 cd endwatch
 cp backend/.env.example backend/.env
+cp frontend/.env.example frontend/.env
 docker-compose up --build
 ```
 Open http://localhost:5173
