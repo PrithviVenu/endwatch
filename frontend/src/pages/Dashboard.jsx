@@ -78,7 +78,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     fetchAll()
-    const id = setInterval(fetchAll, 30_000)
+    const id = setInterval(fetchAll, 10_000)
     return () => clearInterval(id)
   }, [fetchAll])
 
@@ -107,6 +107,12 @@ export default function Dashboard() {
         intervalMin: addIntervalMin,
       }))
       await urlsApi.addUrls(urls)
+      try {
+        // Best-effort: enqueue checks immediately so new URLs show status quickly.
+        await urlsApi.triggerCheck()
+      } catch {
+        // Ignore; scheduler will pick it up soon anyway.
+      }
       setAddUrlRows([createEmptyUrlRow()])
       setAddIntervalMin(5)
       setAddOpen(false)
