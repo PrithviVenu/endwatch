@@ -1,5 +1,6 @@
 import { Fragment, useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { toast } from 'sonner'
 import {
   Activity,
   AlertTriangle,
@@ -56,7 +57,6 @@ export default function Dashboard() {
   const [urls, setUrls] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [notice, setNotice] = useState('')
   const [addOpen, setAddOpen] = useState(false)
   const [addAddress, setAddAddress] = useState('')
   const [addLabel, setAddLabel] = useState('')
@@ -77,7 +77,6 @@ export default function Dashboard() {
 
   const fetchAll = useCallback(async () => {
     setError('')
-    setNotice('')
     try {
       const [statsData, urlsData] = await Promise.all([
         urlsApi.getStats(),
@@ -135,6 +134,7 @@ export default function Dashboard() {
       try {
         // Best-effort: enqueue checks immediately so new URLs show status quickly.
         await urlsApi.triggerCheck()
+        toast.success('URL created. Initial check triggered — results will appear in a few seconds.')
       } catch {
         // Ignore; scheduler will pick it up soon anyway.
       }
@@ -156,10 +156,8 @@ export default function Dashboard() {
   async function handleManualCheck() {
     setChecking(true)
     try {
-      setError('')
-      setNotice('')
-      const data = await urlsApi.triggerCheck()
-      setNotice(data?.message ?? 'Manual check triggered')
+      await urlsApi.triggerCheck()
+      toast.success('Manual check triggered — please wait a few seconds for results to update.')
     } catch (err) {
       setError(err.response?.data?.error ?? 'Check failed')
     } finally {
@@ -170,10 +168,8 @@ export default function Dashboard() {
   async function handleManualCheckUrl(id) {
     setCheckingByUrl((prev) => ({ ...prev, [id]: true }))
     try {
-      setError('')
-      setNotice('')
-      const data = await urlsApi.triggerCheckForUrl(id)
-      setNotice(data?.message ?? 'Manual check triggered')
+      await urlsApi.triggerCheckForUrl(id)
+      toast.success('Manual check triggered — please wait a few seconds for results to update.')
     } catch (err) {
       setError(err.response?.data?.error ?? 'Check failed')
     } finally {
@@ -185,6 +181,7 @@ export default function Dashboard() {
     setDeletingId(id)
     try {
       await urlsApi.deleteUrl(id)
+      toast.success('URL deleted.')
       setExpandedUrlId((cur) => (cur === id ? null : cur))
       setHistoryHoursByUrl((prev) => {
         const next = { ...prev }
@@ -292,10 +289,6 @@ export default function Dashboard() {
       {error ? (
         <p className="mb-4 text-sm text-down" role="alert">
           {error}
-        </p>
-      ) : notice ? (
-        <p className="mb-4 text-sm text-up" role="status">
-          {notice}
         </p>
       ) : null}
 
