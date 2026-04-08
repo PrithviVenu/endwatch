@@ -2,6 +2,8 @@
 
 A full-stack platform to monitor URL health, track uptime, and visualize response times across your endpoints.
 
+**Live Demo:** https://www.endwatch.in/
+
 ## Quick Start
 ```bash
 git clone https://github.com/PrithviVenu/endwatch.git
