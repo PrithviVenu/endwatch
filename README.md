@@ -12,6 +12,14 @@ cp backend/.env.example backend/.env
 cp frontend/.env.example frontend/.env
 docker-compose up --build
 ```
+
+## IMPORTANT: Email setup (Resend)
+After running the Quick Start commands above, open `backend/.env` and set a Resend API key for emails to work.
+
+1. Generate an API key at `https://resend.com/api-keys`
+2. Add it to `backend/.env`:
+   - `RESEND_API_KEY=YOUR_KEY_HERE`
+
 Open http://localhost:5173
 
 Edit `docker-compose.yml` / `frontend/.env` if the API is not at `http://localhost:5001/api` (for example when deploying). Vite reads variables prefixed with `VITE_` at build time.
