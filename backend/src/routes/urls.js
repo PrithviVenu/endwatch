@@ -8,6 +8,19 @@ const router = Router();
 
 router.use(authenticate);
 
+const HTTP_METHODS = new Set([
+  "GET",
+  "POST",
+  "PUT",
+  "PATCH",
+  "DELETE",
+  "HEAD",
+  "OPTIONS",
+]);
+const BODYLESS_METHODS = new Set(["GET", "HEAD"]);
+const MAX_REQUEST_BODY_BYTES = 128 * 1024; // 128kb
+const MAX_HEADERS_BYTES = 32 * 1024; // 32kb
+
 function normalizeUrlAddress(raw) {
   if (raw == null) return null;
   const trimmed = String(raw).trim();
@@ -18,32 +31,85 @@ function normalizeUrlAddress(raw) {
   return trimmed;
 }
 
-function parseUrlItem(item, index) {
-  if (typeof item === "string") {
-    const address = normalizeUrlAddress(item);
-    if (address === null) return null;
-    return { address, label: undefined, intervalMin: undefined };
+function parseHeaders(raw) {
+  if (raw === undefined || raw === null) return {};
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    throw new Error("body.headers must be an object of string:string pairs");
   }
-  if (item && typeof item === "object" && typeof item.address === "string") {
-    const address = normalizeUrlAddress(item.address);
-    if (address === null) return null;
-    const label =
-      item.label === undefined || item.label === null
-        ? undefined
-        : String(item.label);
-    let intervalMin = undefined;
-    if (item.intervalMin !== undefined && item.intervalMin !== null) {
-      const n = Number(item.intervalMin);
-      if (!Number.isFinite(n) || n < 1) {
-        throw new Error(`urls[${index}]: intervalMin must be a number >= 1`);
-      }
-      intervalMin = Math.floor(n);
+
+  const out = {};
+  for (const [k, v] of Object.entries(raw)) {
+    if (typeof k !== "string" || k.trim() === "") {
+      throw new Error("body.headers keys must be non-empty strings");
     }
-    return { address, label, intervalMin };
+    if (v === undefined || v === null) continue;
+    if (typeof v !== "string") {
+      throw new Error("body.headers values must be strings");
+    }
+    out[k] = v;
   }
-  throw new Error(
-    `urls[${index}]: expected a non-empty string or object with address`
-  );
+
+  return out;
+}
+
+function parseUrlPayload(body) {
+  if (!body || typeof body !== "object") {
+    throw new Error("body must be an object");
+  }
+
+  const address = normalizeUrlAddress(body.address);
+  if (address === null) {
+    throw new Error("body.address must be a non-empty string");
+  }
+
+  const label =
+    body.label === undefined || body.label === null ? undefined : String(body.label);
+
+  let intervalMin = undefined;
+  if (body.intervalMin !== undefined && body.intervalMin !== null) {
+    const n = Number(body.intervalMin);
+    if (!Number.isFinite(n) || n < 1) {
+      throw new Error("body.intervalMin must be a number >= 1");
+    }
+    intervalMin = Math.floor(n);
+  }
+
+  const methodRaw =
+    body.method === undefined || body.method === null ? "GET" : String(body.method);
+  const method = methodRaw.toUpperCase();
+  if (!HTTP_METHODS.has(method)) {
+    throw new Error("body.method must be a valid HTTP method");
+  }
+
+  const headers = parseHeaders(body.headers);
+  const headersBytes = Buffer.byteLength(JSON.stringify(headers), "utf8");
+  if (headersBytes > MAX_HEADERS_BYTES) {
+    const err = new Error("headers too large");
+    err.statusCode = 413;
+    throw err;
+  }
+
+  const requestBody =
+    body.requestBody === undefined || body.requestBody === null
+      ? null
+      : String(body.requestBody);
+
+  if (BODYLESS_METHODS.has(method) && requestBody && requestBody.trim() !== "") {
+    const err = new Error("requestBody is not allowed for GET/HEAD requests");
+    err.statusCode = 400;
+    throw err;
+  }
+
+  if (requestBody !== null) {
+    const bytes = Buffer.byteLength(requestBody, "utf8");
+    if (bytes > MAX_REQUEST_BODY_BYTES) {
+      const err = new Error("requestBody too large");
+      err.statusCode = 413;
+      throw err;
+    }
+  }
+
+  return { address, label, intervalMin, method, headers, requestBody };
 }
 
 router.get("/", async (req, res) => {
@@ -67,62 +133,53 @@ router.get("/", async (req, res) => {
 });
 
 router.post("/", async (req, res) => {
-  const { urls: items } = req.body ?? {};
-  if (!Array.isArray(items) || items.length === 0) {
-    return res.status(400).json({ error: "body.urls must be a non-empty array" });
-  }
-
-  const userId = req.user.id;
-  const results = [];
-
   try {
-    for (let i = 0; i < items.length; i++) {
-      const parsed = parseUrlItem(items[i], i);
-      if (parsed === null) continue;
-      const { address, label, intervalMin } = parsed;
+    const { address, label, intervalMin, method, headers, requestBody } =
+      parseUrlPayload(req.body ?? {});
 
-      const row = await prisma.url.upsert({
-        where: {
-          userId_address: { userId, address },
-        },
-        create: {
-          userId,
-          address,
-          label: label ?? null,
-          intervalMin: intervalMin ?? 5,
-        },
-        update: {
-          ...(label !== undefined ? { label } : {}),
-          ...(intervalMin !== undefined ? { intervalMin } : {}),
-        },
-        include: {
-          checkResults: {
-            take: 1,
-            orderBy: { checkedAt: "desc" },
-          },
-        },
-      });
+    const userId = req.user.id;
 
-      const { checkResults, ...url } = row;
-      results.push({
+    const row = await prisma.url.upsert({
+      where: { userId_address: { userId, address } },
+      create: {
+        userId,
+        address,
+        label: label ?? null,
+        intervalMin: intervalMin ?? 5,
+        method,
+        headers,
+        requestBody,
+      },
+      update: {
+        ...(label !== undefined ? { label } : {}),
+        ...(intervalMin !== undefined ? { intervalMin } : {}),
+        method,
+        headers,
+        requestBody,
+      },
+      include: {
+        checkResults: {
+          take: 1,
+          orderBy: { checkedAt: "desc" },
+        },
+      },
+    });
+
+    const { checkResults, ...url } = row;
+    return res.status(201).json({
+      url: {
         ...url,
         latestCheck: checkResults[0] ?? null,
-      });
-    }
-  } catch (e) {
-    if (e instanceof Error && e.message.startsWith("urls[")) {
-      return res.status(400).json({ error: e.message });
-    }
-    throw e;
-  }
-
-  if (results.length === 0) {
-    return res.status(400).json({
-      error: "No valid URLs to add after normalization",
+      },
     });
+  } catch (e) {
+    const statusCode =
+      e && typeof e === "object" && "statusCode" in e ? Number(e.statusCode) : 400;
+    if (e instanceof Error) {
+      return res.status(statusCode).json({ error: e.message });
+    }
+    return res.status(statusCode).json({ error: "Invalid request" });
   }
-
-  res.status(201).json({ urls: results });
 });
 
 router.post("/check", async (req, res) => {

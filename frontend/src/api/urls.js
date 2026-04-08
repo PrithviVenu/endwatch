@@ -5,8 +5,8 @@ export async function getUrls() {
   return data
 }
 
-export async function addUrls(urls) {
-  const { data } = await client.post('/urls', { urls })
+export async function addUrl(url) {
+  const { data } = await client.post('/urls', url)
   return data
 }
 

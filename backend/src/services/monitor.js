@@ -4,6 +4,7 @@ import { sendDownAlert, sendRecoveryAlert } from "./email.js";
 import { withCorrelationId } from "../utils/logger.js";
 
 const NETWORK_RETRY_CODES = new Set(["ECONNABORTED", "ENOTFOUND", "ECONNREFUSED"]);
+const BODYLESS_METHODS = new Set(["GET", "HEAD"]);
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -34,13 +35,25 @@ export async function checkUrl(url, correlationId) {
 
   const previousStatus = urlWithData?.checkResults?.[0]?.status;
   const userEmail = urlWithData?.user?.email;
+  const addressForRequest = urlWithData?.address ?? url.address;
+  const method = String(urlWithData?.method ?? "GET").toUpperCase();
+  const headersRaw = urlWithData?.headers;
+  const headers =
+    headersRaw && typeof headersRaw === "object" && !Array.isArray(headersRaw)
+      ? headersRaw
+      : {};
+  const requestBody = urlWithData?.requestBody ?? null;
 
   const maxRetries = 3; // after initial attempt (total attempts = 4)
   const baseDelayMs = 1000;
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
-      const res = await axios.get(url.address, {
+      const res = await axios({
+        url: addressForRequest,
+        method,
+        headers,
+        ...(BODYLESS_METHODS.has(method) ? {} : { data: requestBody ?? undefined }),
         timeout: 10_000,
         maxRedirects: 5,
         validateStatus: () => true,
@@ -128,7 +141,7 @@ export async function checkUrl(url, correlationId) {
   log[level]({
     msg: "url.check.result",
     urlId: url.id,
-    address: url.address,
+        address: addressForRequest,
     status,
     responseTime,
     statusCode,

@@ -17,6 +17,16 @@ enum CheckStatus {
   DOWN
 }
 
+enum HttpMethod {
+  GET
+  POST
+  PUT
+  PATCH
+  DELETE
+  HEAD
+  OPTIONS
+}
+
 model User {
   id                 String    @id @default(uuid()) @db.Uuid
   email              String    @unique
@@ -37,6 +47,9 @@ model Url {
   label        String?
   userId       String        @db.Uuid
   intervalMin  Int           @default(5)
+  method       HttpMethod    @default(GET)
+  headers      Json          @default("{}")
+  requestBody  String?
   active       Boolean       @default(true)
   createdAt    DateTime      @default(now())
   user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)

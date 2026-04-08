@@ -5,14 +5,14 @@ import * as authApi from '../api/auth.js'
 
 export default function VerifyEmailPage() {
   const [searchParams] = useSearchParams()
-  const [status, setStatus] = useState('loading')
-  const [error, setError] = useState('')
+  const token = searchParams.get('token')?.trim() ?? ''
+  const [status, setStatus] = useState(() => (token ? 'loading' : 'error'))
+  const [error, setError] = useState(() =>
+    token ? '' : 'Missing verification token.',
+  )
 
   useEffect(() => {
-    const token = searchParams.get('token')?.trim() ?? ''
     if (!token) {
-      setStatus('error')
-      setError('Missing verification token.')
       return
     }
 
@@ -35,7 +35,7 @@ export default function VerifyEmailPage() {
     return () => {
       cancelled = true
     }
-  }, [searchParams])
+  }, [token])
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-6">

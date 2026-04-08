@@ -39,8 +39,15 @@ const HISTORY_PRESETS = [
   { label: '7d', hours: 168 },
 ]
 
-function createEmptyUrlRow() {
-  return { id: crypto.randomUUID(), address: '', label: '' }
+function createEmptyHeaderRow() {
+  return { id: crypto.randomUUID(), key: '', value: '' }
+}
+
+function getHeaderPairs(headers) {
+  if (!headers || typeof headers !== 'object' || Array.isArray(headers)) return []
+  return Object.entries(headers)
+    .filter(([k, v]) => typeof k === 'string' && k.trim() !== '' && typeof v === 'string')
+    .sort(([a], [b]) => a.localeCompare(b))
 }
 
 export default function Dashboard() {
@@ -50,7 +57,13 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [addOpen, setAddOpen] = useState(false)
-  const [addUrlRows, setAddUrlRows] = useState(() => [createEmptyUrlRow()])
+  const [addAddress, setAddAddress] = useState('')
+  const [addLabel, setAddLabel] = useState('')
+  const [addMethod, setAddMethod] = useState('GET')
+  const [addHeadersRows, setAddHeadersRows] = useState(() => [
+    createEmptyHeaderRow(),
+  ])
+  const [addRequestBody, setAddRequestBody] = useState('')
   const [addIntervalMin, setAddIntervalMin] = useState(5)
   const [addSubmitting, setAddSubmitting] = useState(false)
   const [checking, setChecking] = useState(false)
@@ -89,36 +102,49 @@ export default function Dashboard() {
     navigate('/login', { replace: true })
   }
 
-  async function handleAddUrls(e) {
+  async function handleAddUrl(e) {
     e.preventDefault()
-    const parsed = addUrlRows
-      .map(({ address, label }) => {
-        const a = address.trim()
-        if (!a) return null
-        const l = label.trim()
-        return l === '' ? { address: a } : { address: a, label: l }
-      })
-      .filter(Boolean)
-    if (parsed.length === 0) return
+    const address = addAddress.trim()
+    if (!address) return
+    const label = addLabel.trim()
+    const method = addMethod
+
+    const headers = addHeadersRows.reduce((acc, row) => {
+      const k = row.key.trim()
+      if (!k) return acc
+      acc[k] = row.value
+      return acc
+    }, {})
+
+    const requestBodyAllowed = method !== 'GET' && method !== 'HEAD'
+    const requestBody = requestBodyAllowed ? addRequestBody : ''
+
     setAddSubmitting(true)
     try {
-      const urls = parsed.map((item) => ({
-        ...item,
+      await urlsApi.addUrl({
+        address,
+        label: label === '' ? null : label,
         intervalMin: addIntervalMin,
-      }))
-      await urlsApi.addUrls(urls)
+        method,
+        headers,
+        requestBody: requestBody === '' ? null : requestBody,
+      })
       try {
         // Best-effort: enqueue checks immediately so new URLs show status quickly.
         await urlsApi.triggerCheck()
       } catch {
         // Ignore; scheduler will pick it up soon anyway.
       }
-      setAddUrlRows([createEmptyUrlRow()])
+      setAddAddress('')
+      setAddLabel('')
+      setAddMethod('GET')
+      setAddHeadersRows([createEmptyHeaderRow()])
+      setAddRequestBody('')
       setAddIntervalMin(5)
       setAddOpen(false)
       await fetchAll()
     } catch (err) {
-      setError(err.response?.data?.error ?? 'Failed to add URLs')
+      setError(err.response?.data?.error ?? 'Failed to add URL')
     } finally {
       setAddSubmitting(false)
     }
@@ -204,13 +230,17 @@ export default function Dashboard() {
             type="button"
             onClick={() => {
               setAddIntervalMin(5)
-              setAddUrlRows([createEmptyUrlRow()])
+              setAddAddress('')
+              setAddLabel('')
+              setAddMethod('GET')
+              setAddHeadersRows([createEmptyHeaderRow()])
+              setAddRequestBody('')
               setAddOpen(true)
             }}
             className="flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-white hover:opacity-90"
           >
             <Plus className="h-4 w-4" />
-            Add URLs
+            Add URL
           </button>
           <button
             type="button"
@@ -283,11 +313,14 @@ export default function Dashboard() {
 
           <div className="mt-8 overflow-hidden rounded-xl border border-border-custom bg-card">
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[720px] text-left text-sm">
+              <table className="w-full min-w-[980px] text-left text-sm">
                 <thead>
                   <tr className="bg-hover text-xs uppercase tracking-wider text-gray-400">
                     <th className="px-4 py-3 font-medium">URL</th>
                     <th className="px-4 py-3 font-medium">Label</th>
+                    <th className="px-4 py-3 font-medium">Method</th>
+                    <th className="px-4 py-3 font-medium">Headers</th>
+                    <th className="px-4 py-3 font-medium">Body</th>
                     <th className="px-4 py-3 font-medium">Status</th>
                     <th className="px-4 py-3 font-medium">Response</th>
                     <th className="px-4 py-3 font-medium">Last checked</th>
@@ -298,10 +331,10 @@ export default function Dashboard() {
                   {urls.length === 0 ? (
                     <tr className="border-t border-border-custom">
                       <td
-                        colSpan={6}
+                        colSpan={9}
                         className="px-4 py-8 text-center text-gray-500"
                       >
-                        No URLs yet. Add some with &quot;Add URLs&quot;.
+                        No URLs yet. Add one with &quot;Add URL&quot;.
                       </td>
                     </tr>
                   ) : (
@@ -313,6 +346,10 @@ export default function Dashboard() {
                       const chartHours = historyHoursByUrl[row.id] ?? 24
                       const sla = slaByUrl[row.id]
                       const slaLoading = slaLoadingByUrl[row.id]
+                      const method = row.method ?? 'GET'
+                      const headerPairs = getHeaderPairs(row.headers)
+                      const headerCount = headerPairs.length
+                      const requestBody = row.requestBody ?? null
                       return (
                         <Fragment key={row.id}>
                           <tr
@@ -331,6 +368,33 @@ export default function Dashboard() {
                             </td>
                             <td className="px-4 py-3 text-gray-300">
                               {row.label ?? '—'}
+                            </td>
+                            <td className="px-4 py-3">
+                              <span className="rounded bg-hover px-2 py-1 font-mono text-xs text-white">
+                                {method}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-gray-300">
+                              {headerCount === 0 ? (
+                                '—'
+                              ) : (
+                                <span className="rounded bg-hover px-2 py-1 text-xs text-white">
+                                  {headerCount}
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3 text-gray-300">
+                              {requestBody ? (
+                                <span className="rounded bg-hover px-2 py-1 text-xs text-white">
+                                  {new Blob([requestBody]).size >= 1024
+                                    ? `${Math.round(
+                                        (new Blob([requestBody]).size / 1024) * 10,
+                                      ) / 10} kb`
+                                    : `${new Blob([requestBody]).size} b`}
+                                </span>
+                              ) : (
+                                '—'
+                              )}
                             </td>
                             <td className="px-4 py-3">
                               {!latest ? (
@@ -374,25 +438,72 @@ export default function Dashboard() {
                           </tr>
                           {expanded ? (
                             <tr className="border-t border-border-custom bg-background">
-                              <td colSpan={6} className="px-4 pb-4 pt-0">
+                              <td colSpan={9} className="px-4 pb-4 pt-0">
                                 <div className="mt-2 rounded-xl border border-border-custom bg-card p-4">
-                                  <div className="mb-4 flex flex-wrap gap-2">
-                                    {HISTORY_PRESETS.map(({ label, hours }) => (
-                                      <button
-                                        key={label}
-                                        type="button"
-                                        onClick={() =>
-                                          setHistoryHoursForUrl(row.id, hours)
-                                        }
-                                        className={`rounded-lg px-3 py-1.5 text-sm font-medium transition ${
-                                          chartHours === hours
-                                            ? 'bg-accent text-white'
-                                            : 'bg-hover text-gray-400 hover:text-white'
-                                        }`}
-                                      >
-                                        {label}
-                                      </button>
-                                    ))}
+                                  <div className="mb-4 grid gap-3 md:grid-cols-2">
+                                    <div className="rounded-xl border border-border-custom bg-card p-4">
+                                      <p className="text-xs uppercase tracking-wider text-gray-400">
+                                        Request config
+                                      </p>
+                                      <div className="mt-3 space-y-2 text-sm">
+                                        <p className="text-gray-400">
+                                          Method:{' '}
+                                          <span className="font-mono text-white">
+                                            {method}
+                                          </span>
+                                        </p>
+                                        <div>
+                                          <p className="text-gray-400">Headers</p>
+                                          {headerCount === 0 ? (
+                                            <p className="mt-1 text-gray-500">—</p>
+                                          ) : (
+                                            <div className="mt-2 max-h-40 overflow-auto rounded-lg border border-border-custom bg-hover p-3 font-mono text-xs text-white">
+                                              {headerPairs.map(([k, v]) => (
+                                                <div key={k} className="truncate">
+                                                  <span className="text-gray-300">
+                                                    {k}:
+                                                  </span>{' '}
+                                                  {v}
+                                                </div>
+                                              ))}
+                                            </div>
+                                          )}
+                                        </div>
+                                        <div>
+                                          <p className="text-gray-400">Body</p>
+                                          {!requestBody ? (
+                                            <p className="mt-1 text-gray-500">—</p>
+                                          ) : (
+                                            <pre className="mt-2 max-h-40 overflow-auto rounded-lg border border-border-custom bg-hover p-3 text-xs text-white">
+                                              {requestBody}
+                                            </pre>
+                                          )}
+                                        </div>
+                                      </div>
+                                    </div>
+                                    <div className="rounded-xl border border-border-custom bg-card p-4">
+                                      <p className="text-xs uppercase tracking-wider text-gray-400">
+                                        History
+                                      </p>
+                                      <div className="mt-3 flex flex-wrap gap-2">
+                                        {HISTORY_PRESETS.map(({ label, hours }) => (
+                                          <button
+                                            key={label}
+                                            type="button"
+                                            onClick={() =>
+                                              setHistoryHoursForUrl(row.id, hours)
+                                            }
+                                            className={`rounded-lg px-3 py-1.5 text-sm font-medium transition ${
+                                              chartHours === hours
+                                                ? 'bg-accent text-white'
+                                                : 'bg-hover text-gray-400 hover:text-white'
+                                            }`}
+                                          >
+                                            {label}
+                                          </button>
+                                        ))}
+                                      </div>
+                                    </div>
                                   </div>
                                   <UrlHistoryChart
                                     urlId={row.id}
@@ -482,89 +593,146 @@ export default function Dashboard() {
             onClick={(e) => e.stopPropagation()}
           >
             <h2 id="add-urls-title" className="text-lg font-semibold text-white">
-              Add URLs
+              Add URL
             </h2>
             <p className="mt-1 text-sm text-gray-400">
               Duplicates for your account are updated.
             </p>
-            <form onSubmit={handleAddUrls} className="mt-4 space-y-3">
+            <form onSubmit={handleAddUrl} className="mt-4 space-y-3">
               <div className="space-y-2">
-                {addUrlRows.map((row) => (
-                  <div
-                    key={row.id}
-                    className="flex items-center gap-2"
+                <input
+                  type="text"
+                  inputMode="url"
+                  autoComplete="url"
+                  value={addAddress}
+                  onChange={(e) => setAddAddress(e.target.value)}
+                  placeholder="https://google.com"
+                  className="w-full rounded-lg border border-border-custom bg-hover px-3 py-2 text-white placeholder-gray-500 focus:border-accent focus:outline-none"
+                />
+                <input
+                  type="text"
+                  value={addLabel}
+                  onChange={(e) => setAddLabel(e.target.value)}
+                  placeholder="Label (optional)"
+                  className="w-full rounded-lg border border-border-custom bg-hover px-3 py-2 text-white placeholder-gray-500 focus:border-accent focus:outline-none"
+                />
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-2">
+                <label className="block text-sm text-gray-400">
+                  Method
+                  <select
+                    value={addMethod}
+                    onChange={(e) => {
+                      const next = e.target.value
+                      setAddMethod(next)
+                      if (next === 'GET' || next === 'HEAD') {
+                        setAddRequestBody('')
+                      }
+                    }}
+                    className="mt-2 w-full cursor-pointer rounded-lg border border-border-custom bg-hover px-4 py-3 text-white focus:border-accent focus:outline-none"
                   >
+                    {['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'].map(
+                      (m) => (
+                        <option key={m} value={m}>
+                          {m}
+                        </option>
+                      ),
+                    )}
+                  </select>
+                </label>
+
+                <label className="block text-sm text-gray-400">
+                  Check interval
+                  <select
+                    value={addIntervalMin}
+                    onChange={(e) => setAddIntervalMin(Number(e.target.value))}
+                    className="mt-2 w-full cursor-pointer rounded-lg border border-border-custom bg-hover px-4 py-3 text-white focus:border-accent focus:outline-none"
+                  >
+                    {ADD_INTERVAL_OPTIONS.map((m) => (
+                      <option key={m} value={m}>
+                        {m} min
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+
+              <div className="space-y-2">
+                <p className="text-sm text-gray-400">Headers</p>
+                {addHeadersRows.map((row) => (
+                  <div key={row.id} className="flex items-center gap-2">
                     <input
                       type="text"
-                      inputMode="url"
-                      autoComplete="url"
-                      value={row.address}
+                      value={row.key}
                       onChange={(e) => {
                         const v = e.target.value
-                        setAddUrlRows((rows) =>
+                        setAddHeadersRows((rows) =>
                           rows.map((r) =>
-                            r.id === row.id ? { ...r, address: v } : r,
+                            r.id === row.id ? { ...r, key: v } : r,
                           ),
                         )
                       }}
-                      placeholder="https://google.com"
+                      placeholder="Header name"
                       className="min-w-0 flex-1 rounded-lg border border-border-custom bg-hover px-3 py-2 text-white placeholder-gray-500 focus:border-accent focus:outline-none"
                     />
                     <input
                       type="text"
-                      value={row.label}
+                      value={row.value}
                       onChange={(e) => {
                         const v = e.target.value
-                        setAddUrlRows((rows) =>
+                        setAddHeadersRows((rows) =>
                           rows.map((r) =>
-                            r.id === row.id ? { ...r, label: v } : r,
+                            r.id === row.id ? { ...r, value: v } : r,
                           ),
                         )
                       }}
-                      placeholder="Label (optional)"
-                      className="w-[200px] shrink-0 rounded-lg border border-border-custom bg-hover px-3 py-2 text-white placeholder-gray-500 focus:border-accent focus:outline-none"
+                      placeholder="Value"
+                      className="min-w-0 flex-1 rounded-lg border border-border-custom bg-hover px-3 py-2 text-white placeholder-gray-500 focus:border-accent focus:outline-none"
                     />
                     <button
                       type="button"
-                      disabled={addUrlRows.length <= 1 || addSubmitting}
+                      disabled={addHeadersRows.length <= 1 || addSubmitting}
                       onClick={() =>
-                        setAddUrlRows((rows) =>
+                        setAddHeadersRows((rows) =>
                           rows.length <= 1
                             ? rows
                             : rows.filter((r) => r.id !== row.id),
                         )
                       }
                       className="shrink-0 rounded p-2 text-gray-400 transition hover:text-down disabled:pointer-events-none disabled:opacity-30"
-                      aria-label="Remove row"
+                      aria-label="Remove header"
                     >
                       <X className="h-4 w-4" />
                     </button>
                   </div>
                 ))}
-              </div>
-              <button
-                type="button"
-                disabled={addSubmitting}
-                onClick={() =>
-                  setAddUrlRows((rows) => [...rows, createEmptyUrlRow()])
-                }
-                className="text-sm text-accent hover:underline disabled:opacity-50"
-              >
-                + Add another URL
-              </button>
-              <label className="mt-4 block text-sm text-gray-400">
-                Check interval (applies to all URLs)
-                <select
-                  value={addIntervalMin}
-                  onChange={(e) => setAddIntervalMin(Number(e.target.value))}
-                  className="mt-2 w-full cursor-pointer rounded-lg border border-border-custom bg-hover px-4 py-3 text-white focus:border-accent focus:outline-none"
+                <button
+                  type="button"
+                  disabled={addSubmitting}
+                  onClick={() =>
+                    setAddHeadersRows((rows) => [...rows, createEmptyHeaderRow()])
+                  }
+                  className="text-sm text-accent hover:underline disabled:opacity-50"
                 >
-                  {ADD_INTERVAL_OPTIONS.map((m) => (
-                    <option key={m} value={m}>
-                      {m} min
-                    </option>
-                  ))}
-                </select>
+                  + Add header
+                </button>
+              </div>
+
+              <label className="block text-sm text-gray-400">
+                Request body
+                <textarea
+                  value={addRequestBody}
+                  onChange={(e) => setAddRequestBody(e.target.value)}
+                  disabled={addMethod === 'GET' || addMethod === 'HEAD'}
+                  placeholder={
+                    addMethod === 'GET' || addMethod === 'HEAD'
+                      ? 'Not allowed for GET/HEAD'
+                      : 'Optional'
+                  }
+                  rows={4}
+                  className="mt-2 w-full resize-y rounded-lg border border-border-custom bg-hover px-3 py-2 font-mono text-white placeholder-gray-500 focus:border-accent focus:outline-none disabled:opacity-50"
+                />
               </label>
               <div className="mt-4 flex justify-end gap-2">
                 <button
@@ -586,7 +754,7 @@ export default function Dashboard() {
                       Adding…
                     </span>
                   ) : (
-                    'Add URLs'
+                    'Add URL'
                   )}
                 </button>
               </div>
