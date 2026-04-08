@@ -194,6 +194,24 @@ router.post("/check", async (req, res) => {
   res.json({ message: `Check triggered for ${urls.length} URLs` });
 });
 
+router.post("/:id/check", async (req, res) => {
+  const { id } = req.params;
+
+  const url = await prisma.url.findFirst({
+    where: { id, userId: req.user.id },
+  });
+
+  if (!url) {
+    return res.status(404).json({ error: "URL not found" });
+  }
+
+  runChecksForUrls([url], req.correlationId).catch((err) => {
+    logger.error(err);
+  });
+
+  res.json({ message: "Check triggered for URL" });
+});
+
 router.get("/stats", async (req, res) => {
   const userId = req.user.id;
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000);

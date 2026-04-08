@@ -56,6 +56,7 @@ export default function Dashboard() {
   const [urls, setUrls] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [notice, setNotice] = useState('')
   const [addOpen, setAddOpen] = useState(false)
   const [addAddress, setAddAddress] = useState('')
   const [addLabel, setAddLabel] = useState('')
@@ -67,6 +68,7 @@ export default function Dashboard() {
   const [addIntervalMin, setAddIntervalMin] = useState(5)
   const [addSubmitting, setAddSubmitting] = useState(false)
   const [checking, setChecking] = useState(false)
+  const [checkingByUrl, setCheckingByUrl] = useState({})
   const [deletingId, setDeletingId] = useState(null)
   const [expandedUrlId, setExpandedUrlId] = useState(null)
   const [historyHoursByUrl, setHistoryHoursByUrl] = useState({})
@@ -75,6 +77,7 @@ export default function Dashboard() {
 
   const fetchAll = useCallback(async () => {
     setError('')
+    setNotice('')
     try {
       const [statsData, urlsData] = await Promise.all([
         urlsApi.getStats(),
@@ -153,12 +156,28 @@ export default function Dashboard() {
   async function handleManualCheck() {
     setChecking(true)
     try {
-      await urlsApi.triggerCheck()
-      await fetchAll()
+      setError('')
+      setNotice('')
+      const data = await urlsApi.triggerCheck()
+      setNotice(data?.message ?? 'Manual check triggered')
     } catch (err) {
       setError(err.response?.data?.error ?? 'Check failed')
     } finally {
       setChecking(false)
+    }
+  }
+
+  async function handleManualCheckUrl(id) {
+    setCheckingByUrl((prev) => ({ ...prev, [id]: true }))
+    try {
+      setError('')
+      setNotice('')
+      const data = await urlsApi.triggerCheckForUrl(id)
+      setNotice(data?.message ?? 'Manual check triggered')
+    } catch (err) {
+      setError(err.response?.data?.error ?? 'Check failed')
+    } finally {
+      setCheckingByUrl((prev) => ({ ...prev, [id]: false }))
     }
   }
 
@@ -256,7 +275,7 @@ export default function Dashboard() {
             ) : (
               <>
                 <RefreshCw className="h-4 w-4" />
-                Manual check
+                Manual Check All URLs
               </>
             )}
           </button>
@@ -273,6 +292,10 @@ export default function Dashboard() {
       {error ? (
         <p className="mb-4 text-sm text-down" role="alert">
           {error}
+        </p>
+      ) : notice ? (
+        <p className="mb-4 text-sm text-up" role="status">
+          {notice}
         </p>
       ) : null}
 
@@ -350,6 +373,7 @@ export default function Dashboard() {
                       const headerPairs = getHeaderPairs(row.headers)
                       const headerCount = headerPairs.length
                       const requestBody = row.requestBody ?? null
+                      const rowChecking = checkingByUrl[row.id] === true
                       return (
                         <Fragment key={row.id}>
                           <tr
@@ -418,6 +442,28 @@ export default function Dashboard() {
                               {formatRelativeTime(latest?.checkedAt)}
                             </td>
                             <td className="px-4 py-3 text-right">
+                              <button
+                                type="button"
+                                disabled={rowChecking}
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  handleManualCheckUrl(row.id)
+                                }}
+                                className="mr-1 inline-flex items-center gap-2 rounded-lg bg-hover px-3 py-1.5 text-xs font-medium text-white transition hover:opacity-90 disabled:opacity-50"
+                                aria-label="Manual check URL"
+                              >
+                                {rowChecking ? (
+                                  <>
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                    Checking...
+                                  </>
+                                ) : (
+                                  <>
+                                    <RefreshCw className="h-4 w-4" />
+                                    Manual Check
+                                  </>
+                                )}
+                              </button>
                               <button
                                 type="button"
                                 disabled={deletingId === row.id}

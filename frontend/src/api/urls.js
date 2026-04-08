@@ -19,6 +19,11 @@ export async function triggerCheck() {
   return data
 }
 
+export async function triggerCheckForUrl(id) {
+  const { data } = await client.post(`/urls/${id}/check`)
+  return data
+}
+
 export async function getStats() {
   const { data } = await client.get('/urls/stats')
   return data
