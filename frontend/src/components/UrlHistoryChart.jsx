@@ -4,6 +4,7 @@ import {
   CartesianGrid,
   Line,
   LineChart,
+  ReferenceArea,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -14,10 +15,12 @@ import * as urlsApi from '../api/urls.js'
 const AXIS_STROKE = '#9ca3af'
 const GRID_STROKE = '#222222'
 const LINE_STROKE = '#22c55e'
+const DOWN_LINE_STROKE = '#ef4444'
 const DOT_UP = '#22c55e'
 const DOT_DOWN = '#ef4444'
 const TOOLTIP_BG = '#111111'
 const TOOLTIP_BORDER = '#222222'
+const DOWN_BAND_OPACITY = 0.12
 
 function formatAxisTime(iso) {
   if (!iso) return ''
@@ -120,11 +123,69 @@ export default function UrlHistoryChart({ urlId, hours }) {
     }
   }, [urlId, hours])
 
-  const chartData = points.map((r) => ({
+  const baseData = points.map((r) => ({
     ...r,
     checkedAt: r.checkedAt,
     responseTime: r.responseTime ?? null,
   }))
+
+  const downIntervals = (() => {
+    const intervals = []
+    let downStart = null
+
+    for (const p of baseData) {
+      const t = p?.checkedAt
+      if (!t) continue
+      const isDown = p.status === 'DOWN'
+      const isUp = p.status === 'UP'
+
+      if (downStart == null) {
+        if (isDown) downStart = t
+        continue
+      }
+
+      if (isUp) {
+        intervals.push({ start: downStart, end: t })
+        downStart = null
+      }
+    }
+
+    if (downStart != null) {
+      const last = baseData[baseData.length - 1]
+      if (last?.checkedAt) {
+        intervals.push({ start: downStart, end: last.checkedAt })
+      }
+    }
+
+    return intervals.filter((it) => it.start && it.end && it.start !== it.end)
+  })()
+
+  const chartData = (() => {
+    let lastUpRt = null
+    let lastKnownRt = null
+    let inDown = false
+    return baseData.map((p) => {
+      const isUp = p.status === 'UP'
+      const isDown = p.status === 'DOWN'
+      const rt = p.responseTime ?? null
+
+      if (rt != null) lastKnownRt = rt
+      if (isUp && rt != null) lastUpRt = rt
+
+      const isDownEnd = isUp && inDown
+      if (isDown) inDown = true
+      if (isUp) inDown = false
+
+      const downBaseline = lastUpRt ?? lastKnownRt ?? 0
+
+      return {
+        ...p,
+        rtUp: isUp ? rt : null,
+        rtDown: isDown ? downBaseline : isDownEnd ? downBaseline : null,
+        dotY: isUp ? rt : isDown ? downBaseline : null,
+      }
+    })
+  })()
 
   if (loading) {
     return (
@@ -161,6 +222,16 @@ export default function UrlHistoryChart({ urlId, hours }) {
             stroke={GRID_STROKE}
             strokeDasharray="3 3"
           />
+          {downIntervals.map((it) => (
+            <ReferenceArea
+              key={`${it.start}-${it.end}`}
+              x1={it.start}
+              x2={it.end}
+              fill={DOWN_LINE_STROKE}
+              fillOpacity={DOWN_BAND_OPACITY}
+              ifOverflow="extendDomain"
+            />
+          ))}
           <XAxis
             dataKey="checkedAt"
             tickFormatter={formatAxisTime}
@@ -170,7 +241,6 @@ export default function UrlHistoryChart({ urlId, hours }) {
             axisLine={{ stroke: AXIS_STROKE }}
           />
           <YAxis
-            dataKey="responseTime"
             stroke={AXIS_STROKE}
             tick={{ fill: AXIS_STROKE, fontSize: 12 }}
             tickLine={{ stroke: AXIS_STROKE }}
@@ -187,12 +257,34 @@ export default function UrlHistoryChart({ urlId, hours }) {
           <Tooltip content={<CustomTooltip />} />
           <Line
             type="monotone"
-            dataKey="responseTime"
+            dataKey="rtUp"
             stroke={LINE_STROKE}
             strokeWidth={2}
+            dot={false}
+            activeDot={false}
+            connectNulls={false}
+          />
+          <Line
+            type="monotone"
+            dataKey="rtDown"
+            stroke={DOWN_LINE_STROKE}
+            strokeWidth={1.75}
+            strokeDasharray="4 3"
+            dot={false}
+            activeDot={false}
+            connectNulls={false}
+            isAnimationActive={false}
+          />
+          <Line
+            type="monotone"
+            dataKey="dotY"
+            stroke="transparent"
+            strokeWidth={0}
             dot={renderDot}
             activeDot={{ r: 5 }}
             connectNulls={false}
+            isAnimationActive={false}
+            legendType="none"
           />
         </LineChart>
       </ResponsiveContainer>
